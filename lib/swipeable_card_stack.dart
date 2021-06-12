@@ -1,16 +1,13 @@
 library swipeable_card_stack;
 
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:swipeable_card_stack/swipe_controller.dart';
-import 'dart:math';
 
 export './swipe_controller.dart';
 
-List<Alignment> cardsAlign = [
-  Alignment(0.0, 1.0),
-  Alignment(0.0, 0.8),
-  Alignment(0.0, 0.0)
-];
+List<Alignment> cardsAlign = [Alignment(0.0, 1.0), Alignment(0.0, 0.8), Alignment(0.0, 0.0)];
 List<Size> cardsSize = List(3);
 
 class SwipeableCardsSection extends StatefulWidget {
@@ -18,6 +15,7 @@ class SwipeableCardsSection extends StatefulWidget {
   //First 3 widgets
   final List<Widget> items;
   final Function onCardSwiped;
+  final Function onAnimationEnd;
   final double cardWidthTopMul;
   final double cardWidthMiddleMul;
   final double cardWidthBottomMul;
@@ -34,6 +32,7 @@ class SwipeableCardsSection extends StatefulWidget {
     @required BuildContext context,
     @required this.items,
     this.onCardSwiped,
+    this.onAnimationEnd,
     this.cardWidthTopMul = 0.9,
     this.cardWidthMiddleMul = 0.85,
     this.cardWidthBottomMul = 0.8,
@@ -44,25 +43,21 @@ class SwipeableCardsSection extends StatefulWidget {
     this.enableSwipeUp = true,
     this.enableSwipeDown = true,
   }) {
-    cardsSize[0] = Size(MediaQuery.of(context).size.width * cardWidthTopMul,
-        MediaQuery.of(context).size.height * cardHeightTopMul);
-    cardsSize[1] = Size(MediaQuery.of(context).size.width * cardWidthMiddleMul,
-        MediaQuery.of(context).size.height * cardHeightMiddleMul);
-    cardsSize[2] = Size(MediaQuery.of(context).size.width * cardWidthBottomMul,
-        MediaQuery.of(context).size.height * cardHeightBottomMul);
+    cardsSize[0] = Size(MediaQuery.of(context).size.width * cardWidthTopMul, MediaQuery.of(context).size.height * cardHeightTopMul);
+    cardsSize[1] = Size(MediaQuery.of(context).size.width * cardWidthMiddleMul, MediaQuery.of(context).size.height * cardHeightMiddleMul);
+    cardsSize[2] = Size(MediaQuery.of(context).size.width * cardWidthBottomMul, MediaQuery.of(context).size.height * cardHeightBottomMul);
   }
 
   @override
   _CardsSectionState createState() => _CardsSectionState();
 }
 
-class _CardsSectionState extends State<SwipeableCardsSection>
-    with SingleTickerProviderStateMixin {
+class _CardsSectionState extends State<SwipeableCardsSection> with SingleTickerProviderStateMixin {
   int cardsCounter = 0;
   int index = 0;
   Widget appendCard;
 
-  List<Widget> cards = List();
+  final List<Widget> cards = List.empty(growable: true);
   AnimationController _controller;
   bool enableSwipe = true;
 
@@ -71,21 +66,27 @@ class _CardsSectionState extends State<SwipeableCardsSection>
   double frontCardRot = 0.0;
 
   void _triggerSwipe(Direction dir) {
+    if (_controller.isAnimating) return;
     if (dir == Direction.left) {
-      widget.onCardSwiped != null ? widget.onCardSwiped(Direction.left, index, cards[0]) : () {};
+      widget.onCardSwiped != null ? onCardSwiped(Direction.left, index, cards[0]) : () {};
       frontCardAlign = Alignment(-0.001, 0.0);
     } else if (dir == Direction.right) {
-      widget.onCardSwiped != null ? widget.onCardSwiped(Direction.right, index, cards[0]) : () {};
+      widget.onCardSwiped != null ? onCardSwiped(Direction.right, index, cards[0]) : () {};
       frontCardAlign = Alignment(0.001, 0.0);
     } else if (dir == Direction.up) {
-      widget.onCardSwiped != null ? widget.onCardSwiped(Direction.up, index, cards[0]) : () {};
+      widget.onCardSwiped != null ? onCardSwiped(Direction.up, index, cards[0]) : () {};
       frontCardAlign = Alignment(0.0, -0.001);
     } else if (dir == Direction.down) {
-      widget.onCardSwiped != null ? widget.onCardSwiped(Direction.down, index, cards[0]) : () {};
+      widget.onCardSwiped != null ? onCardSwiped(Direction.down, index, cards[0]) : () {};
       frontCardAlign = Alignment(0.0, 0.001);
     }
-
     animateCards();
+  }
+
+  onCardSwiped(final Direction direction, final int index, final Widget card) {
+    if (!_controller.isAnimating) {
+      widget.onCardSwiped(direction, index, card);
+    }
   }
 
   void _appendItem(Widget newCard) {
@@ -96,6 +97,10 @@ class _CardsSectionState extends State<SwipeableCardsSection>
     this.enableSwipe = isSwipeEnabled;
   }
 
+  void _dispose() {
+    _controller.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -103,6 +108,7 @@ class _CardsSectionState extends State<SwipeableCardsSection>
     widget.cardController.listener = _triggerSwipe;
     widget.cardController.addItem = _appendItem;
     widget.cardController.enableSwipeListener = _enableSwipe;
+    widget.cardController.onDispose = _dispose;
 
     // Init cards
     for (cardsCounter = 0; cardsCounter < 3; cardsCounter++) {
@@ -116,8 +122,7 @@ class _CardsSectionState extends State<SwipeableCardsSection>
     frontCardAlign = cardsAlign[2];
 
     // Init the animation controller
-    _controller =
-        AnimationController(duration: Duration(milliseconds: 700), vsync: this);
+    _controller = AnimationController(duration: Duration(milliseconds: 700), vsync: this);
     _controller.addListener(() => setState(() {}));
     _controller.addStatusListener((AnimationStatus status) {
       if (status == AnimationStatus.completed) changeCardsOrder();
@@ -140,42 +145,25 @@ class _CardsSectionState extends State<SwipeableCardsSection>
                 onPanUpdate: (DragUpdateDetails details) {
                   // Add what the user swiped in the last frame to the alignment of the card
                   setState(() {
-                    frontCardAlign = Alignment(
-                        frontCardAlign.x +
-                            20 *
-                                details.delta.dx /
-                                MediaQuery.of(context).size.width,
-                        frontCardAlign.y +
-                            20 *
-                                details.delta.dy /
-                                MediaQuery.of(context).size.height);
+                    frontCardAlign = Alignment(frontCardAlign.x + 20 * details.delta.dx / MediaQuery.of(context).size.width, frontCardAlign.y + 20 * details.delta.dy / MediaQuery.of(context).size.height);
 
                     frontCardRot = frontCardAlign.x; // * rotation speed;
                   });
                 },
                 // When releasing the first card
                 onPanEnd: (_) {
-
                   // If the front card was swiped far enough to count as swiped
                   if (frontCardAlign.x > 3.0) {
-                    widget.onCardSwiped != null
-                        ? widget.onCardSwiped(Direction.right, index, cards[0])
-                        : () {};
+                    widget.onCardSwiped != null ? onCardSwiped(Direction.right, index, cards[0]) : () {};
                     animateCards();
                   } else if (frontCardAlign.x < -3.0) {
-                    widget.onCardSwiped != null
-                        ? widget.onCardSwiped(Direction.left, index, cards[0])
-                        : () {};
+                    widget.onCardSwiped != null ? onCardSwiped(Direction.left, index, cards[0]) : () {};
                     animateCards();
                   } else if (frontCardAlign.y < -3.0 && widget.enableSwipeUp) {
-                    widget.onCardSwiped != null
-                        ? widget.onCardSwiped(Direction.up, index, cards[0])
-                        : () {};
+                    widget.onCardSwiped != null ? onCardSwiped(Direction.up, index, cards[0]) : () {};
                     animateCards();
                   } else if (frontCardAlign.y > 3.0 && widget.enableSwipeDown) {
-                    widget.onCardSwiped != null
-                        ? widget.onCardSwiped(Direction.down, index, cards[0])
-                        : () {};
+                    widget.onCardSwiped != null ? onCardSwiped(Direction.down, index, cards[0]) : () {};
                     animateCards();
                   } else {
                     // Return to the initial rotation and alignment
@@ -193,37 +181,21 @@ class _CardsSectionState extends State<SwipeableCardsSection>
 
   Widget backCard() {
     return Align(
-      alignment: _controller.status == AnimationStatus.forward
-          ? CardsAnimation.backCardAlignmentAnim(_controller).value
-          : cardsAlign[0],
-      child: SizedBox.fromSize(
-          size: _controller.status == AnimationStatus.forward
-              ? CardsAnimation.backCardSizeAnim(_controller).value
-              : cardsSize[2],
-          child: cards[2]),
+      alignment: _controller.status == AnimationStatus.forward ? CardsAnimation.backCardAlignmentAnim(_controller).value : cardsAlign[0],
+      child: SizedBox.fromSize(size: _controller.status == AnimationStatus.forward ? CardsAnimation.backCardSizeAnim(_controller).value : cardsSize[2], child: cards[2]),
     );
   }
 
   Widget middleCard() {
     return Align(
-      alignment: _controller.status == AnimationStatus.forward
-          ? CardsAnimation.middleCardAlignmentAnim(_controller).value
-          : cardsAlign[1],
-      child: SizedBox.fromSize(
-          size: _controller.status == AnimationStatus.forward
-              ? CardsAnimation.middleCardSizeAnim(_controller).value
-              : cardsSize[1],
-          child: cards[1]),
+      alignment: _controller.status == AnimationStatus.forward ? CardsAnimation.middleCardAlignmentAnim(_controller).value : cardsAlign[1],
+      child: SizedBox.fromSize(size: _controller.status == AnimationStatus.forward ? CardsAnimation.middleCardSizeAnim(_controller).value : cardsSize[1], child: cards[1]),
     );
   }
 
   Widget frontCard() {
     return Align(
-        alignment: _controller.status == AnimationStatus.forward
-            ? CardsAnimation.frontCardDisappearAlignmentAnim(
-                    _controller, frontCardAlign)
-                .value
-            : frontCardAlign,
+        alignment: _controller.status == AnimationStatus.forward ? CardsAnimation.frontCardDisappearAlignmentAnim(_controller, frontCardAlign).value : frontCardAlign,
         child: Transform.rotate(
           angle: (pi / 180.0) * frontCardRot,
           child: SizedBox.fromSize(size: cardsSize[0], child: cards[0]),
@@ -246,65 +218,40 @@ class _CardsSectionState extends State<SwipeableCardsSection>
     });
   }
 
-  void animateCards() {
+  Future<void> animateCards() async {
     _controller.stop();
     _controller.value = 0.0;
-    _controller.forward();
+    await _controller.forward();
+    widget.onAnimationEnd();
   }
 }
 
 class CardsAnimation {
-  static Animation<Alignment> backCardAlignmentAnim(
-      AnimationController parent) {
-    return AlignmentTween(begin: cardsAlign[0], end: cardsAlign[1]).animate(
-        CurvedAnimation(
-            parent: parent, curve: Interval(0.4, 0.7, curve: Curves.easeIn)));
+  static Animation<Alignment> backCardAlignmentAnim(AnimationController parent) {
+    return AlignmentTween(begin: cardsAlign[0], end: cardsAlign[1]).animate(CurvedAnimation(parent: parent, curve: Interval(0.4, 0.7, curve: Curves.easeIn)));
   }
 
   static Animation<Size> backCardSizeAnim(AnimationController parent) {
-    return SizeTween(begin: cardsSize[2], end: cardsSize[1]).animate(
-        CurvedAnimation(
-            parent: parent, curve: Interval(0.4, 0.7, curve: Curves.easeIn)));
+    return SizeTween(begin: cardsSize[2], end: cardsSize[1]).animate(CurvedAnimation(parent: parent, curve: Interval(0.4, 0.7, curve: Curves.easeIn)));
   }
 
-  static Animation<Alignment> middleCardAlignmentAnim(
-      AnimationController parent) {
-    return AlignmentTween(begin: cardsAlign[1], end: cardsAlign[2]).animate(
-        CurvedAnimation(
-            parent: parent, curve: Interval(0.2, 0.5, curve: Curves.easeIn)));
+  static Animation<Alignment> middleCardAlignmentAnim(AnimationController parent) {
+    return AlignmentTween(begin: cardsAlign[1], end: cardsAlign[2]).animate(CurvedAnimation(parent: parent, curve: Interval(0.2, 0.5, curve: Curves.easeIn)));
   }
 
   static Animation<Size> middleCardSizeAnim(AnimationController parent) {
-    return SizeTween(begin: cardsSize[1], end: cardsSize[0]).animate(
-        CurvedAnimation(
-            parent: parent, curve: Interval(0.2, 0.5, curve: Curves.easeIn)));
+    return SizeTween(begin: cardsSize[1], end: cardsSize[0]).animate(CurvedAnimation(parent: parent, curve: Interval(0.2, 0.5, curve: Curves.easeIn)));
   }
 
-  static Animation<Alignment> frontCardDisappearAlignmentAnim(
-      AnimationController parent, Alignment beginAlign) {
-    if (beginAlign.x == -0.001 ||
-        beginAlign.x == 0.001 ||
-        beginAlign.x > 3.0 ||
-        beginAlign.x < -3.0) {
-      return AlignmentTween(
-              begin: beginAlign,
-              end: Alignment(
-                  beginAlign.x > 0 ? beginAlign.x + 30.0 : beginAlign.x - 30.0,
-                  0.0) // Has swiped to the left or right?
+  static Animation<Alignment> frontCardDisappearAlignmentAnim(AnimationController parent, Alignment beginAlign) {
+    if (beginAlign.x == -0.001 || beginAlign.x == 0.001 || beginAlign.x > 3.0 || beginAlign.x < -3.0) {
+      return AlignmentTween(begin: beginAlign, end: Alignment(beginAlign.x > 0 ? beginAlign.x + 30.0 : beginAlign.x - 30.0, 0.0) // Has swiped to the left or right?
               )
-          .animate(CurvedAnimation(
-              parent: parent, curve: Interval(0.0, 0.5, curve: Curves.easeIn)));
+          .animate(CurvedAnimation(parent: parent, curve: Interval(0.0, 0.5, curve: Curves.easeIn)));
     } else {
-      return AlignmentTween(
-              begin: beginAlign,
-              end: Alignment(
-                  0.0,
-                  beginAlign.y > 0
-                      ? beginAlign.y + 30.0
-                      : beginAlign.y - 30.0) // Has swiped to the top or bottom?
+      return AlignmentTween(begin: beginAlign, end: Alignment(0.0, beginAlign.y > 0 ? beginAlign.y + 30.0 : beginAlign.y - 30.0) // Has swiped to the top or bottom?
               )
-          .animate(CurvedAnimation(
-              parent: parent, curve: Interval(0.0, 0.5, curve: Curves.easeIn)));
+          .animate(CurvedAnimation(parent: parent, curve: Interval(0.0, 0.5, curve: Curves.easeIn)));
     }
   }
 }
