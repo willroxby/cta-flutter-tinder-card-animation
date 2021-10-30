@@ -6,10 +6,10 @@ typedef EnableSwipe = void Function(bool dir);
 typedef OnDispose = void Function();
 
 class CardController {
-  TriggerListener listener;
-  AppendItem addItem;
-  EnableSwipe enableSwipeListener;
-  OnDispose onDispose;
+  late TriggerListener listener;
+  late AppendItem addItem;
+  late EnableSwipe enableSwipeListener;
+  late OnDispose onDispose;
 
   void triggerSwipeLeft() {
     return listener.call(Direction.left);
